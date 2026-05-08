@@ -557,6 +557,8 @@ Input items:
             "max_tokens": 2000,
             "temperature": 0.2,
         })
+        if not raw:
+            raise RuntimeError("model boş içerik döndürdü (content=null)")
     except Exception as e:
         print(f"  [ai] hata: {e}")
         return [{"idx": it["idx"], "topic":"Uncategorized","concepts":[],"summary":""} for it in items]
