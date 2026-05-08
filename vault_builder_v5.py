@@ -509,8 +509,12 @@ def _ai_request(payload: dict) -> str:
     }
     req = request.Request("https://openrouter.ai/api/v1/chat/completions",
                           data=body, headers=hdrs)
-    with request.urlopen(req, timeout=60) as r:
-        d = json.loads(r.read())
+    try:
+        with request.urlopen(req, timeout=60) as r:
+            d = json.loads(r.read())
+    except error.HTTPError as e:
+        body_txt = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"HTTP {e.code}: {body_txt[:400]}") from e
     return d["choices"][0]["message"]["content"]
 
 def ai_classify_batch(items: list) -> list:
@@ -552,7 +556,6 @@ Input items:
             "messages": [{"role":"user","content":prompt}],
             "max_tokens": 2000,
             "temperature": 0.2,
-            "response_format": {"type": "json_object"},  # bazı modeller saygı duyuyor
         })
     except Exception as e:
         print(f"  [ai] hata: {e}")
@@ -839,6 +842,22 @@ def run_fetch(urls: list):
     CHECKPOINT.unlink(missing_ok=True)
     print(f"\n→ {VAULT}")
 
+def run_reset():
+    """Checkpoint + vault notlarını siler — sıfırdan başlamak için."""
+    import shutil
+    if CHECKPOINT.exists():
+        CHECKPOINT.unlink(); print(f"[reset] checkpoint silindi")
+    notes = VAULT / DIR_NOTES
+    if notes.exists():
+        shutil.rmtree(notes); print(f"[reset] {notes} silindi")
+    people = VAULT / DIR_PEOPLE
+    if people.exists():
+        shutil.rmtree(people); print(f"[reset] {people} silindi")
+    concepts = VAULT / DIR_CONCEPTS
+    if concepts.exists():
+        shutil.rmtree(concepts); print(f"[reset] {concepts} silindi")
+    print("Hazır. Şimdi 'fetch' çalıştırabilirsin.")
+
 def run_rebuild():
     """Mevcut notları okuyup MOC + hub stub'ları yeniden üretir."""
     ensure_dirs()
@@ -867,6 +886,8 @@ def main():
 
     if mode == "rebuild":
         run_rebuild(); return
+    if mode == "reset":
+        run_reset(); return
 
     print("[urls] toplanıyor...")
     safari = get_safari_tabs()
@@ -879,7 +900,7 @@ def main():
     elif mode == "fetch":
         run_fetch(urls)
     else:
-        print("Kullanım: python3 vault_builder_v5.py [fetch|quick|rebuild]")
+        print("Kullanım: python3 vault_builder_v5.py [fetch|quick|rebuild|reset]")
 
 if __name__ == "__main__":
     main()
