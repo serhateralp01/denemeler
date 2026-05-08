@@ -33,13 +33,13 @@ VAULT = Path("/Users/serhateralp01/Documents/The Vault of an Ambition")
 VAULT = Path(VAULT)  # string olarak girilse de Path'e çevirir
 
 OPENROUTER_KEY   = "sk-or-..."
-OPENROUTER_MODEL = "anthropic/claude-haiku-4-5"
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
 # Alternatifler:
-#   openai/gpt-4o-mini
+#   anthropic/claude-haiku-4-5
 #   google/gemini-flash-1.5
 #   meta-llama/llama-3.1-8b-instruct:free   (ücretsiz)
 
-BATCH_SIZE        = 15        # AI'a tek seferde gönderilecek URL sayısı
+BATCH_SIZE        = 10        # AI'a tek seferde gönderilecek URL sayısı
 FETCH_CONCURRENCY = 10        # paralel HTTP çekme limiti
 CHECKPOINT        = Path.home() / ".vault_builder_v5_checkpoint.json"
 
