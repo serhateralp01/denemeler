@@ -30,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 # ══════════════════════════════════════════════════════════════════════
 
 VAULT = Path("/Users/serhateralp01/Documents/The Vault of an Ambition")
+VAULT = Path(VAULT)  # string olarak girilse de Path'e çevirir
 
 OPENROUTER_KEY   = "sk-or-..."
 OPENROUTER_MODEL = "anthropic/claude-haiku-4-5"
