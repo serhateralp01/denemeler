@@ -33,10 +33,10 @@ VAULT = Path("/Users/serhateralp01/Documents/The Vault of an Ambition")
 VAULT = Path(VAULT)  # string olarak girilse de Path'e çevirir
 
 OPENROUTER_KEY   = "sk-or-..."
-OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
-# Alternatifler (ücretli):
+OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
+# Alternatifler:
+#   meta-llama/llama-3.3-70b-instruct:free
 #   openai/gpt-4o-mini
-#   anthropic/claude-haiku-4-5
 #   google/gemini-flash-1.5
 
 BATCH_SIZE        = 10        # AI'a tek seferde gönderilecek URL sayısı
@@ -822,11 +822,13 @@ def run_fetch(urls: list):
 
     items = [url_to_item(i, u, fetched.get(u, {})) for i, u in enumerate(remaining)]
 
-    use_ai = OPENROUTER_KEY and not OPENROUTER_KEY.startswith("sk-or-...")
+    use_ai = bool(OPENROUTER_KEY and OPENROUTER_KEY not in ("sk-or-...", "", None))
     if use_ai:
+        print(f"[ai] key: {OPENROUTER_KEY[:12]}... model: {OPENROUTER_MODEL}")
         ai_results = ai_classify_all(items)
     else:
-        print("[ai] OPENROUTER_KEY yok, AI atlandı, hepsi Uncategorized.")
+        print("[ai] OPENROUTER_KEY girilmemiş — AI atlandı, hepsi Uncategorized.")
+        print("     Kod içindeki OPENROUTER_KEY değişkenine key'ini gir.")
         ai_results = {it["idx"]: {"topic":"Uncategorized","concepts":[],"summary":""} for it in items}
 
     print("\n[write] notlar yazılıyor...")
