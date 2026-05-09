@@ -51,28 +51,13 @@ INSTAGRAM_PASS = ""
 # ══════════════════════════════════════════════════════════════════════
 
 TOPICS = [
-    "AI Tools & Products",
-    "Prompt Engineering",
-    "Agents & MCP",
-    "Dev & Open Source",
-    "Visual Design & Figma",
-    "Fashion & Style",
-    "Typography & Fonts",
-    "BIST & Turkish Markets",
-    "US & Global Markets",
-    "Crypto & Web3",
-    "Mindset & Psychology",
-    "Productivity & Systems",
-    "Health & Fitness",
-    "Philosophy & Classics",
-    "Startups & Entrepreneurship",
-    "Strategy & Management",
-    "Content & Marketing",
-    "Sociology & Society",
-    "Politics & Current Affairs",
-    "Food & Drink",
-    "Entertainment",
-    "Uncategorized",
+    "Technology & AI",
+    "Design & Aesthetics",
+    "Finance & Markets",
+    "Mindset & Growth",
+    "Business",
+    "Society & Politics",
+    "Lifestyle & Culture",
 ]
 
 # ══════════════════════════════════════════════════════════════════════
@@ -414,6 +399,19 @@ def fetch_meta_sync(url: str) -> dict:
             return {"title": d.get("title",""), "desc": f"YouTube · {d.get('author_name','')}"}
         except Exception:
             return {"title":"", "desc":""}
+    # trafilatura — sayfa gövde metni (meta description'dan çok daha zengin)
+    try:
+        import trafilatura
+        downloaded = trafilatura.fetch_url(url)
+        if downloaded:
+            body = trafilatura.extract(downloaded, include_comments=False,
+                                       include_tables=False, no_fallback=False) or ""
+            meta = trafilatura.extract_metadata(downloaded)
+            title = (meta.title if meta else "") or ""
+            return {"title": title, "desc": body[:1000]}
+    except Exception:
+        pass
+    # fallback: sadece meta tag'leri
     try:
         with request.urlopen(request.Request(url, headers=HDR), timeout=8) as r:
             if "text/html" not in r.headers.get("Content-Type",""):
@@ -536,26 +534,26 @@ def ai_classify_batch(items: list) -> list:
     ]
     prompt = f"""You are classifying bookmarks for a personal Obsidian knowledge graph.
 
-For each item, output exactly:
-- topic: ONE of the allowed topics (verbatim)
-- concepts: 2-4 short kebab-case tags (lowercase, dashed). These become wiki-links and should be REUSABLE across notes (e.g. "prompt-engineering", "vector-db", "stoicism", "saas-pricing"). Avoid hyper-specific or proper-noun-only tags.
-- summary: 1-2 sentence English summary. Inline-link concepts using [[double-brackets]] when they appear. If content is empty, infer from URL/author/title.
+For each item return:
+- topic: ONE of the allowed topics (verbatim, no changes)
+- concepts: 1-2 short kebab-case tags (lowercase, dashes). These are PERMANENT graph nodes — use broad, timeless concepts that will appear in many notes (e.g. "stoicism", "prompt-engineering", "saas-pricing", "system-design"). NEVER use person names, account handles, or hyper-specific one-off tags.
+- summary: 1-2 sentences. Weave concepts as [[concept]] inline links. Infer from URL/author/title if content is empty.
 
-Allowed topics:
+Allowed topics (pick the closest one):
 {topics_str}
 
-Return a JSON array, one object per input item, no markdown, no commentary:
-[{{"idx": 0, "topic": "...", "concepts": ["...","..."], "summary": "..."}}, ...]
+Return JSON array only, no markdown:
+[{{"idx": 0, "topic": "...", "concepts": ["..."], "summary": "..."}}, ...]
 
-Input items:
+Items:
 {json.dumps(payload_items, ensure_ascii=False)}
 """
     try:
         raw = _ai_request({
             "model": OPENROUTER_MODEL,
             "messages": [{"role":"user","content":prompt}],
-            "max_tokens": 2000,
-            "temperature": 0.2,
+            "max_tokens": 1500,
+            "temperature": 0.1,
         })
         if not raw:
             raise RuntimeError("model boş içerik döndürdü (content=null)")
@@ -581,7 +579,7 @@ Input items:
     for r in parsed if isinstance(parsed, list) else []:
         topic = r.get("topic","Uncategorized")
         if topic not in TOPICS: topic = "Uncategorized"
-        concepts = [slugify(c, 40) for c in (r.get("concepts") or [])][:4]
+        concepts = [slugify(c, 40) for c in (r.get("concepts") or [])][:2]
         concepts = [c for c in concepts if c and len(c) > 1]
         out.append({
             "idx": r.get("idx", -1),
@@ -617,10 +615,9 @@ DIR_NOTES    = "01 - Notes"
 DIR_PEOPLE   = "02 - People"
 DIR_TOPICS   = "03 - Topics"
 DIR_CONCEPTS = "04 - Concepts"
-DIR_MOC      = "00 - MOCs"
 
 def ensure_dirs():
-    for d in (DIR_NOTES, DIR_PEOPLE, DIR_TOPICS, DIR_CONCEPTS, DIR_MOC):
+    for d in (DIR_NOTES, DIR_PEOPLE, DIR_TOPICS, DIR_CONCEPTS):
         (VAULT / d).mkdir(parents=True, exist_ok=True)
 
 def ensure_topic_hub(topic: str):
@@ -724,34 +721,32 @@ def write_note(url: str, kind: str, fetched: dict, ai: dict, idx: int) -> Path:
     return fp
 
 # ══════════════════════════════════════════════════════════════════════
-#  MASTER MOC
+#  HOME
 # ══════════════════════════════════════════════════════════════════════
 
-def write_master_moc():
-    fp = VAULT / DIR_MOC / "Master MOC.md"
+def write_home():
+    fp = VAULT / "Home.md"
+    topic_links = "\n".join(f"- [[{DIR_TOPICS}/{t}|{t}]]" for t in TOPICS)
     lines = [
-        "---", "type: moc", "---", "",
-        f"# Master MOC", "",
-        f"> Generated {datetime.now():%Y-%m-%d %H:%M}", "",
+        "---", "type: home", "---", "",
+        "# Home", "",
+        f"> {datetime.now():%Y-%m-%d %H:%M}", "",
         "## Topics", "",
+        topic_links, "",
+        "## Son eklenenler", "",
         "```dataview",
-        f'TABLE length(rows) AS "Notes" FROM "{DIR_NOTES}" GROUP BY topic SORT length(rows) DESC',
+        f'LIST FROM "{DIR_NOTES}" SORT date DESC LIMIT 20',
         "```", "",
-        "## People (most-linked)", "",
+        "## En aktif kişiler", "",
         "```dataview",
-        f'TABLE length(rows) AS "Notes" FROM "{DIR_NOTES}" '
-        f'WHERE author GROUP BY author SORT length(rows) DESC LIMIT 30',
+        f'TABLE length(rows) AS "not" FROM "{DIR_NOTES}" '
+        f'WHERE author GROUP BY author SORT length(rows) DESC LIMIT 15',
         "```", "",
-        "## Concepts", "",
-        f'See [[{DIR_CONCEPTS}]] folder. Most-referenced concepts:', "",
+        "## Concept'ler", "",
         "```dataview",
-        f'TABLE length(rows) AS "Refs" FROM "{DIR_NOTES}" '
-        f'FLATTEN file.tags AS t WHERE startswith(t, "#concept/") '
-        f'GROUP BY t SORT length(rows) DESC LIMIT 25',
-        "```", "",
-        "## Recent", "",
-        "```dataview",
-        f'LIST FROM "{DIR_NOTES}" SORT date DESC LIMIT 30',
+        f'TABLE length(rows) AS "ref" FROM "{DIR_NOTES}" '
+        f'FLATTEN file.tags AS t WHERE startswith(t, "concept/") '
+        f'GROUP BY t SORT length(rows) DESC LIMIT 20',
         "```", "",
     ]
     fp.write_text("\n".join(lines), encoding="utf-8")
@@ -812,7 +807,7 @@ def run_quick(urls: list):
         kind = url_kind(url)
         author = tw_username(url) if kind == "twitter" else ""
         write_note(url, kind, {"author": author}, {"topic":"Uncategorized","concepts":[],"summary":""}, i)
-    write_master_moc()
+    write_home()
     print(f"\n→ {VAULT}")
 
 def run_fetch(urls: list):
@@ -821,7 +816,7 @@ def run_fetch(urls: list):
     remaining = [u for u in urls if u not in done]
     print(f"[fetch] toplam={len(urls)} done={len(done)} kalan={len(remaining)}\n")
     if not remaining:
-        write_master_moc(); print("Hepsi tamam."); return
+        write_home(); print("Hepsi tamam."); return
 
     fetched = asyncio.run(fetch_all(remaining))
 
@@ -840,7 +835,7 @@ def run_fetch(urls: list):
         write_note(url, it["kind"], fetched.get(url, {}), ai_results.get(it["idx"], {}), it["idx"])
         done.add(url); cp_save(done)
 
-    write_master_moc()
+    write_home()
     CHECKPOINT.unlink(missing_ok=True)
     print(f"\n→ {VAULT}")
 
@@ -878,7 +873,7 @@ def run_rebuild():
         for c in re.findall(r"concept/([\w-]+)", txt):
             ensure_concept_stub(c)
         n += 1
-    write_master_moc()
+    write_home()
     print(f"[rebuild] {n} not tarandı, hub'lar tazelendi.")
 
 # ══════════════════════════════════════════════════════════════════════
