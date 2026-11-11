@@ -32,7 +32,20 @@ from concurrent.futures import ThreadPoolExecutor
 VAULT = Path("/Users/serhateralp01/Documents/The Vault of an Ambition")
 VAULT = Path(VAULT)  # string olarak girilse de Path'e çevirir
 
-OPENROUTER_KEY   = "sk-or-..."
+SCRIPT_DIR = Path(__file__).resolve().parent
+INBOX      = SCRIPT_DIR / "inbox"   # buraya .txt/.md/.csv/.json/.html at → içindeki URL'ler okunur
+
+def _load_key() -> str:
+    """Öncelik: OPENROUTER_API_KEY env → config.local.json → aşağıdaki sabit."""
+    k = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if k: return k
+    cfg = SCRIPT_DIR / "config.local.json"   # gitignore'da, git pull ile ezilmez
+    if cfg.exists():
+        try: return (json.loads(cfg.read_text()).get("openrouter_key") or "").strip()
+        except Exception: pass
+    return "sk-or-..."
+
+OPENROUTER_KEY   = _load_key()
 OPENROUTER_MODEL = "openai/gpt-oss-120b:free"
 # Alternatifler:
 #   meta-llama/llama-3.3-70b-instruct:free
@@ -315,6 +328,20 @@ def url_kind(url: str) -> str:
     if "youtube.com" in url or "youtu.be" in url: return "youtube"
     return "web"
 
+_URL_RE = re.compile(r"https?://[^\s\"'<>\]\)]+")
+
+def read_inbox() -> list:
+    """inbox/ içindeki her dosyadan URL çeker (export, yapıştırılmış not, liste — fark etmez)."""
+    if not INBOX.exists(): return []
+    urls = []
+    for fp in sorted(INBOX.rglob("*")):
+        if fp.suffix.lower() not in (".txt", ".md", ".csv", ".json", ".html", ".htm"): continue
+        txt = fp.read_text(encoding="utf-8", errors="ignore")
+        found = [u.rstrip(".,;:!?") for u in _URL_RE.findall(txt)]
+        print(f"  inbox/{fp.relative_to(INBOX)}: {len(found)} URL")
+        urls += found
+    return urls
+
 def dedup(urls):
     seen, out = set(), []
     for u in urls:
@@ -500,13 +527,14 @@ async def fetch_all(urls: list) -> dict:
 def _ai_request(payload: dict) -> str:
     body = json.dumps(payload).encode()
     hdrs = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://vault-builder.local",
         "X-Title": "Vault Builder v5",
     }
     req = request.Request("https://openrouter.ai/api/v1/chat/completions",
-                          data=body, headers=hdrs)
+                          data=body, headers=hdrs, method="POST")
+    # redirect olsa bile düşmesin
+    req.add_unredirected_header("Authorization", f"Bearer {OPENROUTER_KEY.strip()}")
     try:
         with request.urlopen(req, timeout=60) as r:
             d = json.loads(r.read())
@@ -891,7 +919,8 @@ def main():
     print("[urls] toplanıyor...")
     safari = get_safari_tabs()
     print(f"  Mac Safari: {len(safari)} tab")
-    urls = dedup(APPLE_NOTES_LINKS + IPHONE_TABS + safari)
+    inbox = read_inbox()
+    urls = dedup(APPLE_NOTES_LINKS + IPHONE_TABS + inbox + safari)
     print(f"  Toplam (dedup): {len(urls)}\n")
 
     if mode == "quick":
